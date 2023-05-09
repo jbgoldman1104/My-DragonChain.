@@ -1,0 +1,36 @@
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache
+
+# testing / development
+coverage.xml
+.coverage
+.env
+.envrc
+.direnv
+.venv
+venv
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ide
+.idea
+*.swp
+
+# Docs
+.build
+docs/static/chart/
+
+# Built helm charts
+dragonchain-k8s-*.tgz
+
+# OS Files
+.DS_Store
+desktop.ini
+
+# redis
+dump.rdb

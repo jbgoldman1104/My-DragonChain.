@@ -1,0 +1,188 @@
+webserverLiveliness: true # Set this value to false if migrating from v3 to v4, and a lot of data needs to be re-indexed.
+# Failure to set this to false for an upgrading chain means that the migrations may complete much slower as kubernetes continues to kill the webserver while re-indexing.
+
+global:
+  environment:
+    DRAGONCHAIN_NAME: "ArbitraryName" # This can be anything
+    REGISTRATION_TOKEN: "" # Use token from Dragon Net Registration (or arbitrary string if no Dragon Net)
+    INTERNAL_ID: "" # Use id from Dragon Net registration (or arbitrary string if no Dragon Net)
+    DRAGONCHAIN_ENDPOINT: "https://my-chain.api.company.org:443" # publicly accessible endpoint for this chain. MUST be able to be hit from the internet
+    # If using a simple single node cluster like minikube, and the service values below are left as NodePort with port 30000, this would simply be 'http://public.ip.of.minikube.node:30000'
+    # Remember to switch the protocol http:// or https:// depending on if you have enabled TLS support or not. (This can be any arbitrary string if no Dragon Net)
+    LEVEL: "2" # Integer 1-5 as a string. Must match with Dragon Net registration if participating in Dragon Net
+    TLS_SUPPORT: "" # Put "true" here if you have created a TLS certificate and put into a tls kubernetes secret, otherwise leave empty
+    LOG_LEVEL: "debug"
+    BROADCAST: "true" # Set to "false" if you want to disable Dragon Net support (L1 only)
+    USE_REDISEARCH: "false" # (l2+ only) Set to "true" in order to enable redisearch functionality (requires more cpu/memory). Enables query endpoints
+
+# -- isMinikube --
+# When running on minikube, this should be boolean true
+# This is mainly used in the redis configuration to adjust the somaxconn to a value minikube should use
+# I.e:
+# - name: net.core.somaxconn
+#     value: "1024"
+isMinikube: true
+
+# -- service --
+# This value helps determine how the dragonchain is exposed externally outside of the cluster
+# If ingress is being used, then the service type should be ClusterIP
+# If you want to expose the chain by hitting the kubernetes cluster directly, NodePort can be used with a unique port number
+service:
+  # If using ingress, this should be ClusterIP, if exposing via the cluster directly, (so it can be hit by the direct IP address of a node in the kubernetes cluster) this should be NodePort
+  type: NodePort
+  # Port is only needed if type is "NodePort", and exposing a chain without ingress. Must be 30000-32767 and unique per cluster
+  port: 30000
+
+# -- faas --
+# Every dragonchain will need to communicate with an OpenFaaS system to generate and run smart contracts.
+# We recommend all values addressed within be located on a seperate Kubernetes cluster, but could
+# theoretically live anywhere.
+faas:
+  # -- faas.gateway --
+  #   This value should be the fully qualified url of the OpenFaas gateway you would like your chains to use.
+  gateway: https://my-faas-gateway-url
+
+  # -- faas.mountFaasSecret --
+  #   This value controls whether the secret for openfaas authorization should
+  #   be mounted on the webserver for the get smart contract logs functionality
+  mountFaasSecret: false
+
+  # -- faas.registry --
+  #   This value should be the docker registry address at which your custom smart contract images will be stored and used by openfaas
+  registry: mycompany.docker.io
+  # -- faas.registry_username --
+  #   This is the value of the username for the above docker registry. Please note the password for this username is defined in the secret created for the chain, not directly in the helm chart values
+  registry_username: MyUsername
+
+# -- dragonchain --
+# Dragonchain specific congifuration options live here.
+dragonchain:
+  # -- dragonchain.image --
+  # Set the deployment configuration options for the dragonchain image.
+  image:
+    # -- dragonchain.image.pullPolicy --
+    # In production we recommend "IfNotPresent". For development it is fine to use "Always"
+    # Just keep in mind that Always with a 'latest' tag means your node may receive unexpected updates
+    pullPolicy: Always
+
+    # -- dragonchain.image.value --
+    # The image to use for the dragonchain core container
+    value: docker.io/dragonchain/dragonchain_core
+
+    # -- dragonchain.image.version --
+    # The tag to use with the dragonchain image
+    # Check here for available values: https://hub.docker.com/r/dragonchain/dragonchain_core/tags
+    version: 4.5.1
+
+  # -- dragonchain.storage --
+  # The mount path of a persistent volume to be used by all dragonchain microservices.
+  # This is where your actual blockchain data will be stored at-rest
+  storage:
+    spec:
+      # Switch storage class name to something usable within your cluster. Minikube accepts 'standard'
+      storageClassName: standard
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
+
+  # -- dragonchain.verificationNotifications --
+  # This Level 1 Dragonchain configuration will send received verifications via HTTP unique URL's configured here.
+  # Verifications will be sent with HTTP POST, and contain three relevant headers documented below.
+  # -- Headers --
+  # Authentication: Bearer ${signature}
+  # DragonchainId: PublicIdOfThisL1Dragonchain
+  # Content-Type: application/json
+  # -- Body --
+  # The post body will be JSON of the raw verification object received by this dragonchain. See Dragonchain documentation for details.
+  # -- Signature --
+  # The bearer token will be the signature of the utf8 encoded bytes of the post body signed with the private key, and verifiable with
+  # the public key found in the DragonchainId header. NOTE: Do not trust this header alone to verify signature. Make sure it's a public id
+  # that you trust and expect.
+  verificationNotification: null
+    # -- Example:
+    # all:
+    #   - https://yourUrlHere
+    #   - https://yourUrlHere
+    # l2:
+    #   - https://yourUrlHere
+    # l3:
+    #   - https://yourUrlHere
+    # l4:
+    #   - https://yourUrlHere
+    # l5:
+    #   - https://yourUrlHere
+
+
+redis:
+  # -- redis.storage --
+  # This is the storage spec that the persistent redis uses to maintain state for
+  # a running dragonchain. Configure this as needed
+  storage:
+    spec:
+      # Switch storage class name to something usable within your cluster. Minikube accepts 'standard'
+      storageClassName: standard
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+
+redisearch:
+  # -- redis.storage --
+  # This is the storage spec that the redisearch uses to maintain state for
+  # a running dragonchain. Configure this as needed
+  storage:
+    spec:
+      # Switch storage class name to something usable within your cluster. Minikube accepts 'standard'
+      storageClassName: standard
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+
+# For more information on kubernetes storage, view the docs: https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+# PersistentVolumeClaimSpec API Reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.15/#persistentvolumeclaimspec-v1-core
+
+
+# If running on a very low power machine (i.e. a raspberry pi), it can be useful to allow higher cpu limits on various pods
+# Uncomment below if running on something with little power like a raspberry pi
+
+# cacheredis:
+#   resources:
+#     limits:
+#       cpu: 1
+# persistentredis:
+#   resources:
+#     limits:
+#       cpu: 1
+# redisearch:
+#   resources:
+#     limits:
+#       cpu: 1
+# webserver:
+#   resources:
+#     limits:
+#       cpu: 1
+# transactionProcessor:
+#   resources:
+#     limits:
+#       cpu: 1
+# contractInvoker:
+#   resources:
+#     limits:
+#       cpu: 1
+# broadcastProcessor:
+#   resources:
+#     limits:
+#       cpu: 1
+# scheduler:
+#   resources:
+#     limits:
+#       cpu: 1
+# jobProcessor:
+#   resources:
+#     limits:
+#       cpu: 1
